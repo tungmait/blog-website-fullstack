@@ -1,0 +1,23 @@
+{
+  "name": "blogify",
+  "version": "1.0.0",
+  "description": "Responsive blog website with SQLite database",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "blog",
+    "sqlite",
+    "express",
+    "ejs"
+  ],
+  "author": "tungmait",
+  "license": "MIT",
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "sqlite3": "^5.1.7"
+  }
+}

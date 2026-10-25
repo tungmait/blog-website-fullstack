@@ -1,0 +1,54 @@
+<%- include('partials/header') %>
+
+<div class="section">
+  <div class="admin-toolbar">
+    <h2><%= title %></h2>
+    <a class="link-button" href="/admin">Quay lại danh sách</a>
+  </div>
+
+  <div class="form-card">
+    <form class="form-grid" action="<%= post ? '/admin/posts/' + post.id : '/admin/posts' %>" method="POST">
+      <div class="form-group">
+        <label for="title">Tiêu đề</label>
+        <input id="title" name="title" type="text" value="<%= post ? post.title : '' %>" required />
+      </div>
+
+      <div class="form-group">
+        <label for="excerpt">Tóm tắt</label>
+        <textarea id="excerpt" name="excerpt" placeholder="Tóm tắt ngắn gọn về bài viết"><%= post ? post.excerpt : '' %></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="content">Nội dung</label>
+        <textarea id="content" name="content" required placeholder="Viết nội dung bài viết ở đây..."><%= post ? post.content : '' %></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="author">Tác giả</label>
+        <input id="author" name="author" type="text" value="<%= post ? post.author : 'Admin' %>" />
+      </div>
+
+      <div class="form-group">
+        <label for="category_id">Danh mục</label>
+        <select id="category_id" name="category_id" required>
+          <option value="">-- Chọn danh mục --</option>
+          <% categories.forEach(category => { %>
+            <option value="<%= category.id %>" <%= post && post.category_id == category.id ? 'selected' : '' %>><%= category.name %></option>
+          <% }) %>
+        </select>
+      </div>
+
+      <div class="form-group checkbox-row">
+        <input id="is_published" name="is_published" type="checkbox" <%= post && post.is_published === 1 ? 'checked' : '' %> />
+        <label for="is_published">Đăng ngay</label>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit"><%= post ? 'Cập nhật bài viết' : 'Tạo bài viết' %></button>
+        <a class="button secondary" href="/admin">Hủy</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

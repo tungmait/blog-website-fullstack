@@ -1,0 +1,55 @@
+<%- include('partials/header') %>
+
+<div class="section">
+  <div class="admin-toolbar">
+    <h2>Quản trị blog</h2>
+    <a class="link-button" href="/admin/new">+ Tạo bài viết</a>
+  </div>
+
+  <% if (posts && posts.length) { %>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tiêu đề</th>
+            <th>Danh mục</th>
+            <th>Tác giả</th>
+            <th>Trạng thái</th>
+            <th>Ngày đăng</th>
+            <th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% posts.forEach(post => { %>
+            <tr>
+              <td><strong><%= post.title %></strong></td>
+              <td><%= post.category_name || 'Chưa phân loại' %></td>
+              <td><%= post.author %></td>
+              <td>
+                <% if (post.is_published === 1) { %>
+                  <span class="status published">Đã đăng</span>
+                <% } else { %>
+                  <span class="status draft">Bản nháp</span>
+                <% } %>
+              </td>
+              <td><%= new Date(post.created_at).toLocaleDateString('vi-VN') %></td>
+              <td>
+                <div class="form-actions">
+                  <a class="button secondary" href="/post/<%= post.id %>" target="_blank" rel="noreferrer">Xem</a>
+                  <a class="button secondary" href="/admin/edit/<%= post.id %>">Sửa</a>
+                  <form action="/admin/posts/delete/<%= post.id %>" method="POST" style="display:inline;">
+                    <button class="button danger" type="submit" onclick="return confirm('Bạn có chắc chắn muốn xóa bài viết này?')">Xóa</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <div class="empty-state">Chưa có bài viết nào. Hãy tạo bài viết đầu tiên.</div>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

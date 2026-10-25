@@ -1,0 +1,67 @@
+<%- include('partials/header') %>
+
+<section class="hero">
+  <div class="container">
+    <h1>Khám phá những bài viết hay, hữu ích và cập nhật</h1>
+    <p>
+      Blogify là nơi chia sẻ kiến thức về công nghệ, UX, frontend, backend và các phương pháp làm việc hiệu quả.
+    </p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-header">
+    <h2>Bài viết nổi bật</h2>
+  </div>
+
+  <% if (featured && featured.length) { %>
+    <div class="grid">
+      <% featured.forEach(post => { %>
+        <article class="card">
+          <div class="card-body">
+            <span class="badge"><%= post.category_name || 'Tin tức' %></span>
+            <h3><a href="/post/<%= post.id %>"><%= post.title %></a></h3>
+            <p><%= post.excerpt || 'Xem thêm để hiểu rõ hơn về chủ đề này.' %></p>
+            <div class="meta-row">
+              <span><%= new Date(post.created_at).toLocaleDateString('vi-VN') %></span>
+              <span>👤 <%= post.author %></span>
+            </div>
+            <div class="meta-row">
+              <a class="link-button secondary" href="/post/<%= post.id %>">Đọc tiếp</a>
+            </div>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="empty-state">Chưa có bài viết nào để hiển thị.</div>
+  <% } %>
+</section>
+
+<section class="section">
+  <div class="section-header">
+    <h2>Bài viết mới nhất</h2>
+  </div>
+
+  <% if (posts && posts.length) { %>
+    <div class="grid">
+      <% posts.forEach(post => { %>
+        <article class="card">
+          <div class="card-body">
+            <span class="badge"><%= post.category_name || 'Bài viết' %></span>
+            <h3><a href="/post/<%= post.id %>"><%= post.title %></a></h3>
+            <p><%= post.excerpt || 'Xem chi tiết bài viết để biết thêm.' %></p>
+            <div class="meta-row">
+              <span><%= new Date(post.created_at).toLocaleDateString('vi-VN') %></span>
+              <span><%= post.author %></span>
+            </div>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="empty-state">Hiện tại chưa có bài viết nào.</div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

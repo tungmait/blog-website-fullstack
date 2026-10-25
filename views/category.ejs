@@ -1,0 +1,29 @@
+<%- include('partials/header') %>
+
+<div class="section">
+  <div class="section-header">
+    <h2><%= category.name %></h2>
+  </div>
+
+  <% if (posts && posts.length) { %>
+    <div class="grid">
+      <% posts.forEach(post => { %>
+        <article class="card">
+          <div class="card-body">
+            <span class="badge"><%= post.category_name || category.name %></span>
+            <h3><a href="/post/<%= post.id %>"><%= post.title %></a></h3>
+            <p><%= post.excerpt || 'Xem chi tiết để hiểu hơn về chủ đề này.' %></p>
+            <div class="meta-row">
+              <span><%= new Date(post.created_at).toLocaleDateString('vi-VN') %></span>
+              <span><%= post.author %></span>
+            </div>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="empty-state">Chưa có bài viết nào trong danh mục này.</div>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>
