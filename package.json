@@ -1,7 +1,7 @@
 {
   "name": "blogify",
   "version": "1.0.0",
-  "description": "Responsive blog website with Appwrite database",
+  "description": "Responsive blog website with Firebase Firestore",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,7 +9,7 @@
   },
   "keywords": [
     "blog",
-    "appwrite",
+    "firebase",
     "express",
     "ejs"
   ],
@@ -19,6 +19,6 @@
     "dotenv": "^18.0.9",
     "ejs": "^3.1.10",
     "express": "^4.21.2",
-    "node-appwrite": "^31.0.0"
+    "firebase-admin": "^14.5.0"
   }
 }
