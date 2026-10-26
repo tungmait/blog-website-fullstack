@@ -1,77 +1,72 @@
 /*
- * Blogify - Express + EJS blog backed by Appwrite (Appwrite Education / Cloud).
+ * Blogify - Express + EJS blog backed by Firebase Firestore.
  *
  * Setup:
- *  1. Sign up at https://cloud.appwrite.io (Appwrite Education: apply via the GitHub Student Pack).
- *  2. Create a Project -> copy the Project ID.
- *  3. Project settings -> API keys -> create a key with the scope "databases.read/write"
- *     plus "collections.*" and "attributes.*" (needed for automatic setup).
- *  4. Databases -> Create database -> copy the Database ID.
- *  5. Copy .env.example to .env and fill in the values.
- *  6. npm install && npm start. Collections, attributes and sample data are created on first run.
- *     (Collections can also be created manually in the console; see README.)
+ *  1. Create a Firebase project and enable Firestore in Native mode.
+ *  2. Create a service account and provide its JSON in FIREBASE_SERVICE_ACCOUNT.
+ *  3. Copy .env.example to .env and fill in the Firebase project settings.
+ *  4. Run npm install && npm start. Firestore collections and sample data are created on first run.
  */
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const { Client, Databases, ID, Query } = require('node-appwrite');
+const { applicationDefault, cert, getApps, initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
+const CATEGORIES = process.env.FIREBASE_CATEGORIES_COLLECTION_ID || 'categories';
+const POSTS = process.env.FIREBASE_POSTS_COLLECTION_ID || 'posts';
+let firestore;
+let initialization;
 
-const {
-  APPWRITE_ENDPOINT = 'https://cloud.appwrite.io/v1',
-  APPWRITE_PROJECT_ID,
-  APPWRITE_API_KEY,
-  APPWRITE_DATABASE_ID,
-  APPWRITE_CATEGORIES_COLLECTION_ID = 'categories',
-  APPWRITE_POSTS_COLLECTION_ID = 'posts'
-} = process.env;
+function getDatabase() {
+  if (!firestore) {
+    if (!PROJECT_ID) {
+      throw new Error('Set FIREBASE_PROJECT_ID in .env before starting Blogify.');
+    }
 
-const missing = ['APPWRITE_PROJECT_ID', 'APPWRITE_API_KEY', 'APPWRITE_DATABASE_ID'].filter((k) => !process.env[k]);
-if (missing.length) {
-  console.error(`Missing environment variables: ${missing.join(', ')}. Copy .env.example to .env and fill them in.`);
-  process.exit(1);
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+    let credential = applicationDefault();
+    if (serviceAccountJson) {
+      try {
+        credential = cert(JSON.parse(serviceAccountJson));
+      } catch (error) {
+        throw new Error(`FIREBASE_SERVICE_ACCOUNT must contain valid service-account JSON: ${error.message}`);
+      }
+    }
+
+    const firebaseApp = getApps()[0] || initializeApp({ credential, projectId: PROJECT_ID });
+    firestore = getFirestore(firebaseApp);
+  }
+  return firestore;
 }
 
-const client = new Client()
-  .setEndpoint(APPWRITE_ENDPOINT)
-  .setProject(APPWRITE_PROJECT_ID)
-  .setKey(APPWRITE_API_KEY);
-const databases = new Databases(client);
+const toCategory = (doc) => {
+  const data = doc.data();
+  return { id: doc.id, name: data.name, slug: data.slug };
+};
+const toPost = (doc, categoryMap) => {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    title: data.title,
+    slug: data.slug,
+    excerpt: data.excerpt,
+    content: data.content,
+    author: data.author,
+    category_id: data.category_id,
+    category_name: categoryMap.get(data.category_id) || null,
+    is_published: data.is_published ? 1 : 0,
+    created_at: data.created_at,
+    updated_at: data.updated_at
+  };
+};
 
-const DB = APPWRITE_DATABASE_ID;
-const CATEGORIES = APPWRITE_CATEGORIES_COLLECTION_ID;
-const POSTS = APPWRITE_POSTS_COLLECTION_ID;
-
-// Convert Appwrite documents into the shape the EJS views expect.
-const toCategory = (doc) => ({ id: doc.$id, name: doc.name, slug: doc.slug });
-const toPost = (doc, categoryMap) => ({
-  id: doc.$id,
-  title: doc.title,
-  slug: doc.slug,
-  excerpt: doc.excerpt,
-  content: doc.content,
-  author: doc.author,
-  category_id: doc.category_id,
-  category_name: categoryMap.get(doc.category_id) || null,
-  is_published: doc.is_published ? 1 : 0,
-  created_at: doc.created_at || doc.$createdAt,
-  updated_at: doc.updated_at || doc.$updatedAt
-});
-
-async function listAll(collectionId, queries = []) {
-  const docs = [];
-  const pageSize = 100;
-  while (true) {
-    const page = await databases.listDocuments(DB, collectionId, [
-      ...queries,
-      Query.limit(pageSize),
-      Query.offset(docs.length)
-    ]);
-    docs.push(...page.documents);
-    if (page.documents.length < pageSize) return docs;
-  }
+async function listAll(collectionId) {
+  const snapshot = await getDatabase().collection(collectionId).get();
+  return snapshot.docs;
 }
 
 function slugify(value) {
@@ -102,7 +97,9 @@ async function getAllPosts() {
 }
 
 async function ensureUniqueSlug(baseTitle, excludeId = null) {
-  const used = new Set((await listAll(POSTS)).filter((d) => d.$id !== excludeId).map((d) => d.slug));
+  const used = new Set((await listAll(POSTS))
+    .filter((doc) => doc.id !== excludeId)
+    .map((doc) => doc.data().slug));
   const base = slugify(baseTitle);
   let slug = base;
   let index = 2;
@@ -118,13 +115,11 @@ async function getPublishedPosts() {
 }
 
 async function getPostById(id) {
-  try {
-    const [doc, categoryMap] = await Promise.all([databases.getDocument(DB, POSTS, id), getCategoryMap()]);
-    return toPost(doc, categoryMap);
-  } catch (error) {
-    if (error.code === 404) return null;
-    throw error;
-  }
+  const [doc, categoryMap] = await Promise.all([
+    getDatabase().collection(POSTS).doc(id).get(),
+    getCategoryMap()
+  ]);
+  return doc.exists ? toPost(doc, categoryMap) : null;
 }
 
 async function getPostsByCategory(categoryId) {
@@ -146,50 +141,18 @@ function postData({ title, excerpt, content, author, category_id, is_published }
   };
 }
 
-async function collectionExists(collectionId) {
-  try {
-    await databases.getCollection(DB, collectionId);
-    return true;
-  } catch (error) {
-    if (error.code === 404) return false;
-    throw error;
-  }
-}
-
-// Wait until Appwrite finishes creating attributes, otherwise inserts fail.
-async function waitForAttributes(collectionId) {
-  for (let i = 0; i < 60; i += 1) {
-    const { attributes } = await databases.listAttributes(DB, collectionId);
-    if (attributes.every((a) => a.status === 'available')) return;
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  throw new Error(`Attributes of collection "${collectionId}" were not ready in time.`);
-}
-
 async function initDatabase() {
-  const permissions = []; // Server API key bypasses permissions; no public access needed.
-
-  if (!(await collectionExists(CATEGORIES))) {
-    await databases.createCollection(DB, CATEGORIES, 'Categories', permissions);
-    await databases.createStringAttribute(DB, CATEGORIES, 'name', 255, true);
-    await databases.createStringAttribute(DB, CATEGORIES, 'slug', 255, true);
-    await waitForAttributes(CATEGORIES);
+  if (!initialization) {
+    initialization = seedDatabase().catch((error) => {
+      initialization = null;
+      throw error;
+    });
   }
+  return initialization;
+}
 
-  if (!(await collectionExists(POSTS))) {
-    await databases.createCollection(DB, POSTS, 'Posts', permissions);
-    await databases.createStringAttribute(DB, POSTS, 'title', 255, true);
-    await databases.createStringAttribute(DB, POSTS, 'slug', 255, true);
-    await databases.createStringAttribute(DB, POSTS, 'excerpt', 1000, false);
-    await databases.createStringAttribute(DB, POSTS, 'content', 65535, true);
-    await databases.createStringAttribute(DB, POSTS, 'author', 255, false, 'Admin');
-    await databases.createStringAttribute(DB, POSTS, 'category_id', 64, false);
-    await databases.createBooleanAttribute(DB, POSTS, 'is_published', false, false);
-    await databases.createStringAttribute(DB, POSTS, 'created_at', 64, false);
-    await databases.createStringAttribute(DB, POSTS, 'updated_at', 64, false);
-    await waitForAttributes(POSTS);
-  }
-
+async function seedDatabase() {
+  const database = getDatabase();
   if ((await listAll(CATEGORIES)).length === 0) {
     const defaultCategories = [
       ['Frontend', 'frontend'],
@@ -199,7 +162,7 @@ async function initDatabase() {
     ];
 
     for (const [name, slug] of defaultCategories) {
-      await databases.createDocument(DB, CATEGORIES, ID.unique(), { name, slug });
+      await database.collection(CATEGORIES).doc(slug).set({ id: slug, name, slug });
     }
   }
 
@@ -214,15 +177,15 @@ async function initDatabase() {
         content: '# Cách xây dựng giao diện blog đẹp và tối ưu UX\n\n- Thiết kế rõ ràng, tối giản\n- Dùng khoảng cách hợp lý\n- Tạo tiêu đề dễ đọc\n- Tận dụng bố cục mobile-first\n\nMột blog hiệu quả không chỉ là đẹp, mà còn khiến người đọc dễ tập trung vào nội dung.',
         author: 'Tùng Mãi',
         category_id: bySlug('ui-ux'),
-        is_published: true,
+        is_published: true
       },
       {
         title: 'Node.js và Express cho ứng dụng blog nhanh gọn',
         excerpt: 'Tại sao Express vẫn là lựa chọn phổ biến cho ứng dụng web nhỏ và vừa.',
-        content: '# Node.js và Express cho ứng dụng blog nhanh gọn\n\nExpress giúp bạn xây dựng ứng dụng web rất nhanh.\n\nƯu điểm:\n- Route rõ ràng\n- Dễ tích hợp SQLite\n- Phù hợp với dự án nhỏ, vừa',
+        content: '# Node.js và Express cho ứng dụng blog nhanh gọn\n\nExpress giúp bạn xây dựng ứng dụng web rất nhanh.\n\nƯu điểm:\n- Route rõ ràng\n        - Dễ tích hợp Firestore\n- Phù hợp với dự án nhỏ, vừa',
         author: 'Tùng Mãi',
         category_id: bySlug('backend'),
-        is_published: true,
+        is_published: true
       },
       {
         title: 'Responsive web design là gì và vì sao quan trọng?',
@@ -230,7 +193,7 @@ async function initDatabase() {
         content: '# Responsive web design là gì?\n\nResponsive web design là cách thiết kế website thích ứng với nhiều kích thước màn hình.\n\n- Màn hình điện thoại: bố cục một cột\n- Máy tính bảng: bố cục 2 cột\n- Desktop: bố cục nhiều cột',
         author: 'Tùng Mãi',
         category_id: bySlug('frontend'),
-        is_published: true,
+        is_published: true
       },
       {
         title: '7 thói quen giúp làm việc hiệu quả hơn mỗi ngày',
@@ -238,14 +201,16 @@ async function initDatabase() {
         content: '# 7 thói quen giúp làm việc hiệu quả hơn mỗi ngày\n\n- Ưu tiên công việc quan trọng nhất\n- Chia nhỏ task\n- Tập trung 25 phút rồi nghỉ ngắn\n- Ghi chép tiến độ',
         author: 'Tùng Mãi',
         category_id: bySlug('productivity'),
-        is_published: true,
+        is_published: true
       }
     ];
 
     for (const post of samplePosts) {
       const slug = await ensureUniqueSlug(post.title);
       const now = new Date().toISOString();
-      await databases.createDocument(DB, POSTS, ID.unique(), {
+      const id = `sample-${slug}`;
+      await database.collection(POSTS).doc(id).set({
+        id,
         ...post,
         slug,
         created_at: now,
@@ -263,6 +228,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(async (req, res, next) => {
   try {
+    await initDatabase();
     res.locals.categories = await getCategories();
     next();
   } catch (error) {
@@ -361,7 +327,9 @@ app.post('/admin/posts', async (req, res) => {
 
     const slug = await ensureUniqueSlug(title);
     const now = new Date().toISOString();
-    await databases.createDocument(DB, POSTS, ID.unique(), {
+    const post = getDatabase().collection(POSTS).doc();
+    await post.set({
+      id: post.id,
       ...postData(req.body),
       slug,
       created_at: now,
@@ -385,7 +353,7 @@ app.post('/admin/posts/:id', async (req, res) => {
     }
 
     const slug = await ensureUniqueSlug(title, id);
-    await databases.updateDocument(DB, POSTS, id, {
+    await getDatabase().collection(POSTS).doc(id).update({
       ...postData(req.body),
       slug,
       updated_at: new Date().toISOString()
@@ -400,7 +368,7 @@ app.post('/admin/posts/:id', async (req, res) => {
 
 app.post('/admin/posts/delete/:id', async (req, res) => {
   try {
-    await databases.deleteDocument(DB, POSTS, req.params.id);
+    await getDatabase().collection(POSTS).doc(req.params.id).delete();
     res.redirect('/admin');
   } catch (error) {
     console.error(error);
@@ -424,7 +392,11 @@ async function startServer() {
   });
 }
 
-startServer().catch((error) => {
-  console.error('Failed to start server:', error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
+  });
+}
+
+module.exports = app;
